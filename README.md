@@ -23,44 +23,20 @@ Gedi is an extension of [DIP](https://arxiv.org/abs/2009.00258) descriptor. Addi
 
 ## Tested with
 
-- Ubuntu 20.04
-- CUDA 11.x
-- Python 3.8
-- PyTorch 1.8.1
-- [Open3D 0.15.1](http://www.open3d.org/docs/release/)
-- [torchgeometry v0.1.2](https://kornia.readthedocs.io/en/v0.1.2/)
+- Ubuntu 22.04
+- CUDA 12.8
+- Python 3.10
+- PyTorch 2.8.0
 
 ## Installation
 
-Set up your environment and start it 
+Set up your environment and start it
 
 ```
-virtualenv venv -p python3
-source venv/bin/activate
-pip install --upgrade pip
-```
-
-In order to have Open3D functioning correctly on GPU, you should download and install this version of `torch` ([link](https://github.com/isl-org/open3d_downloads/releases/tag/torch1.8.1)). Once you have downloaded it, install it as
-
-```
-pip install torch-1.8.1-cp38-cp38-linux_x86_64.whl
-```
-
-Then install the following packages
-```
-pip install open3d==0.15.1
-pip install torchgeometry==0.1.2
-pip install gdown
-pip install tensorboard
-pip install protobuf==3.20
-```
-Note: the last pip is to downgrade protobuf in order to avoid your system complaining that the version is too high.
-
-Now, you have to compile and install [Pointnet2](https://github.com/erikwijmans/Pointnet2_PyTorch). This may be a bit tricky, as it could complain if the version of CUDA is different from that of PyTorch. You can check the [original repository](https://github.com/erikwijmans/Pointnet2_PyTorch) for more information.
-
-```
-cd backbones
-pip install ./pointnet2_ops_lib/
+uv venv
+uv pip install torch torchvision open3d torchgeometry gdown tensorboard protobuf
+uv pip install ./backbones/pointnet2_ops_lib/ --no-build-isolation
+uv pip install git+https://github.com/facebookresearch/pytorch3d.git --no-build-isolation
 ```
 
 ## Download data
