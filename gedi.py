@@ -3,33 +3,35 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchgeometry as tgm
 import numpy as np
-import open3d.ml.torch as ml3d
+from pytorch3d.ops import ball_query
 from backbones.pointnet2_ops_lib.pointnet2_ops.pointnet2_modules import PointnetSAModule
 
 
 class tnet(nn.Module):
-
-    def __init__(self,):
+    def __init__(
+        self,
+    ):
         super(tnet, self).__init__()
 
-        self.conv1 = nn.Sequential(nn.Conv1d(3, 256, 1, bias=False),
-                                   nn.BatchNorm1d(256),
-                                   nn.ReLU())
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(3, 256, 1, bias=False), nn.BatchNorm1d(256), nn.ReLU()
+        )
 
-        self.conv2 = nn.Sequential(nn.Conv1d(256, 512, 1, bias=False),
-                                   nn.BatchNorm1d(512),
-                                   nn.ReLU())
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(256, 512, 1, bias=False), nn.BatchNorm1d(512), nn.ReLU()
+        )
 
-        self.conv3 = nn.Sequential(nn.Conv1d(512, 1024, 1, bias=False),
-                                   nn.BatchNorm1d(1024))
+        self.conv3 = nn.Sequential(
+            nn.Conv1d(512, 1024, 1, bias=False), nn.BatchNorm1d(1024)
+        )
 
-        self.fc1 = nn.Sequential(nn.Linear(1024, 512, bias=False),
-                                 nn.BatchNorm1d(512),
-                                 nn.ReLU())
+        self.fc1 = nn.Sequential(
+            nn.Linear(1024, 512, bias=False), nn.BatchNorm1d(512), nn.ReLU()
+        )
 
-        self.fc2 = nn.Sequential(nn.Linear(512, 256, bias=False),
-                                 nn.BatchNorm1d(256),
-                                 nn.ReLU())
+        self.fc2 = nn.Sequential(
+            nn.Linear(512, 256, bias=False), nn.BatchNorm1d(256), nn.ReLU()
+        )
         self._init_last_layer()
 
     def _init_last_layer(self):
@@ -38,12 +40,11 @@ class tnet(nn.Module):
 
     def _forward_last_layer(self, x):
         x = self.fc3(x)
-        x = x + torch.eye(3, device='cuda').view(1, 9).repeat(x.size()[0], 1)
+        x = x + torch.eye(3, device="cuda").view(1, 9).repeat(x.size()[0], 1)
         x = x.view(-1, 3, 3)
         return x
 
     def forward(self, x):
-
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
@@ -59,20 +60,20 @@ class tnet(nn.Module):
 
 
 class qnet(tnet):
-
     def _init_last_layer(self):
         self.fc3 = nn.Linear(256, 4, bias=True)
         torch.nn.init.zeros_(self.fc3.bias)
 
     def _forward_last_layer(self, x):
         quat = self.fc3(x)
-        quat = quat + torch.tensor([1, 0, 0, 0], device='cuda').repeat(quat.size()[0], 1)
+        quat = quat + torch.tensor([1, 0, 0, 0], device="cuda").repeat(
+            quat.size()[0], 1
+        )
         quat = F.normalize(quat, p=2, dim=1)
         return quat
 
 
 class PointNet2Feature(nn.Module):
-
     def __init__(self, dim=32):
         super(PointNet2Feature, self).__init__()
 
@@ -91,12 +92,12 @@ class PointNet2Feature(nn.Module):
             npoint=64,
             radius=0.4,
             nsample=16,
-            mlp=[128+3, 256, 256, 256],
+            mlp=[128 + 3, 256, 256, 256],
             use_xyz=self.use_xyz,
         )
 
         self.samodule3 = PointnetSAModule(
-            mlp=[256+3, 512, 512, 1024], use_xyz=self.use_xyz
+            mlp=[256 + 3, 512, 512, 1024], use_xyz=self.use_xyz
         )
 
         self.fc_layer = nn.Sequential(
@@ -111,7 +112,6 @@ class PointNet2Feature(nn.Module):
         )
 
     def _forward(self, pc):
-
         quat = self.qnet(pc)
         angle_axis = tgm.quaternion_to_angle_axis(quat)
         _trans = tgm.angle_axis_to_rotation_matrix(angle_axis)
@@ -138,8 +138,14 @@ class PointNet2Feature(nn.Module):
 
 
 class LRF(nn.Module):
-
-    def __init__(self, patches_per_pair=256, samples_per_patch=256, eps=1e-12, r_lrf=1, device='cpu'):
+    def __init__(
+        self,
+        patches_per_pair=256,
+        samples_per_patch=256,
+        eps=1e-12,
+        r_lrf=1,
+        device="cpu",
+    ):
         super(LRF, self).__init__()
 
         self.eps = eps
@@ -149,7 +155,6 @@ class LRF(nn.Module):
         self.device = device
 
     def _forward(self, xp, xpi):
-
         B, N, c = xpi.size()
         xpi = xpi.contiguous()  # dim = B x 3 x N
         xp = xp.unsqueeze(2).contiguous()  # dim = B x 3 x 1
@@ -174,14 +179,14 @@ class LRF(nn.Module):
 
         vi = x - proj.transpose(1, 2)
 
-        x_l2 = torch.sqrt((x ** 2).sum(dim=1, keepdim=True))
+        x_l2 = torch.sqrt((x**2).sum(dim=1, keepdim=True))
 
         alpha = self.r_lrf - x_l2
         alpha = alpha * alpha
         beta = (norm * norm).transpose(1, 2)
         vi_c = (alpha * beta * vi).sum(2)
 
-        xp = (vi_c / torch.sqrt((vi_c ** 2).sum(1, keepdim=True)))
+        xp = vi_c / torch.sqrt((vi_c**2).sum(1, keepdim=True))
 
         # yp
         yp = torch.cross(xp, zp.squeeze(), dim=1)
@@ -191,7 +196,6 @@ class LRF(nn.Module):
         return lrf
 
     def forward(self, x0, x0i, x1=None, x1i=None):
-
         # compute local reference frames
         lrf0 = self._forward(x0, x0i)
         inds = np.random.choice(x0i.shape[2], self.samples_per_patch, replace=False)
@@ -210,54 +214,50 @@ class LRF(nn.Module):
 
 
 class GeDi:
-
     def __init__(self, config):
-        self.dim = config['dim']
-        self.samples_per_batch = config['samples_per_batch']
-        self.samples_per_patch_lrf = config['samples_per_patch_lrf']
-        self.samples_per_patch_out = config['samples_per_patch_out']
-        self.r_lrf = config['r_lrf']
+        self.dim = config["dim"]
+        self.samples_per_batch = config["samples_per_batch"]
+        self.samples_per_patch_lrf = config["samples_per_patch_lrf"]
+        self.samples_per_patch_out = config["samples_per_patch_out"]
+        self.r_lrf = config["r_lrf"]
 
-        self.lrf = LRF(patches_per_pair=self.samples_per_batch,
-                       samples_per_patch=self.samples_per_patch_out,
-                       r_lrf=self.r_lrf,
-                       device='cpu')
+        self.lrf = LRF(
+            patches_per_pair=self.samples_per_batch,
+            samples_per_patch=self.samples_per_patch_out,
+            r_lrf=self.r_lrf,
+            device="cpu",
+        )
 
         self.gedi_net = PointNet2Feature(dim=self.dim)
-        self.gedi_net.load_state_dict(torch.load(config['fchkpt_gedi_net'])['pnet_model_state_dict'])
+        self.gedi_net.load_state_dict(
+            torch.load(config["fchkpt_gedi_net"], weights_only=False)[
+                "pnet_model_state_dict"
+            ],
+        )
         self.gedi_net.cuda().eval()
 
     def compute(self, pts, pcd):
-
-        radii = self.r_lrf * torch.ones((len(pts)))
-
-        out = ml3d.ops.radius_search(pcd, pts, radii,
-                                     points_row_splits=torch.LongTensor([0, len(pcd)]),
-                                     queries_row_splits=torch.LongTensor([0, len(pts)]))
+        _, idx, _ = ball_query(
+            pts.unsqueeze(0),
+            pcd.unsqueeze(0),
+            radius=self.r_lrf,
+            K=self.samples_per_patch_lrf,
+            return_nn=False,
+        )
+        idx = idx.squeeze(0)
 
         pcd_desc = np.empty((len(pts), self.dim))
 
         for b in range(int(np.ceil(len(pts) / self.samples_per_batch))):
-
             i_start = b * self.samples_per_batch
-            i_end = (b + 1) * self.samples_per_batch
-            if i_end > len(pts):
-                i_end = len(pts)
+            i_end = min((b + 1) * self.samples_per_batch, len(pts))
 
             x = np.empty((i_end - i_start, 3, self.samples_per_patch_lrf))
 
             j = 0
             for i in range(i_start, i_end):
-
-                _inds = out[0][out[1][i]:out[1][i + 1]]
-                try:
-                    inds = np.random.choice(_inds.numpy(), size=self.samples_per_patch_lrf, replace=False)
-                except:
-                    # print('[w] got patch with few points -> {}. Padding with replicas ...'.format(len(pt_nn)))
-                    inds = np.r_[_inds, np.random.choice(_inds.numpy(), self.samples_per_patch_lrf - len(_inds))]
-
+                inds = idx[i]
                 x[j] = pcd[inds].T
-
                 j += 1
 
             x = torch.Tensor(x)
@@ -267,14 +267,13 @@ class GeDi:
             with torch.no_grad():
                 f = self.gedi_net(patch.cuda())
 
-            pcd_desc[i_start:i_end] = f.cpu().detach().numpy()[:i_end - i_start]
+            pcd_desc[i_start:i_end] = f.cpu().detach().numpy()[: i_end - i_start]
 
         return pcd_desc
 
 
-if __name__ == '__main__':
-
-        x = torch.rand((100, 3, 512)).cuda()  # [npatches, xyz, npoints]
-        net = PointNet2Feature().cuda().eval()
-        out = net(x)
-        print(out.shape)
+if __name__ == "__main__":
+    x = torch.rand((100, 3, 512)).cuda()  # [npatches, xyz, npoints]
+    net = PointNet2Feature().cuda().eval()
+    out = net(x)
+    print(out.shape)
